@@ -1,0 +1,242 @@
+select * from project.dbo.Data1;
+
+select * from project.dbo.Data2;
+
+-- total number of rows in dataset 
+
+SELECT COUNT(*) FROM project..Data1; 
+SELECT COUNT(*) FROM project..Data2;
+
+
+-- Dataset for maharashtra and Karnataka
+SELECT * FROM project..Data1 WHERE State IN ('Maharashtra','Karnataka');
+
+--calculate total population of India
+SELECT SUM(Population) AS population FROM project..Data2 ;
+ 
+
+
+
+ -- calculate avgrage growth of India
+ SELECT AVG(Growth)*100 AS avg_Growth FROM project..data1;
+
+
+ -- avgrage growth by state
+
+  SELECT State, AVG(Growth)*100 AS avg_Growth 
+  FROM project..data1
+  GROUP BY State;
+
+--avg sex ratio in desc order
+-- used round() function to remove decimal point
+SELECT State, ROUND(AVG(Sex_Ratio),0) AS avg_sex_ratio 
+FROM project..data1
+GROUP BY State
+ORDER BY avg_sex_ratio DESC;
+
+
+-- avg literacy rate 
+SELECT State, ROUND(AVG(Literacy),0) AS avg_litracy_ratio 
+FROM project..data1
+GROUP BY State
+HAVING ROUND(AVG(Literacy),0)>90 
+ORDER BY avg_litracy_ratio DESC;
+
+
+
+-- Top 3 state with highest growth ratio
+
+SELECT  State, AVG(Growth)*100 AS avg_growth 
+FROM project..Data1 
+GROUP BY State
+ORDER BY avg_growth DESC LIMIT 3;
+
+
+-- bottom 3 state with lowest sex ratio
+
+
+SELECT top 3 State , ROUND(AVG(Sex_Ratio) ,0) as avg_sex_ratio
+FROM project..Data1
+GROUP BY State
+ORDER BY avg_sex_ratio asc;
+
+
+-- top 3 and bottom 3 states in Literacy ratio
+
+DROP TABLE IF EXISTS #topStates;
+CREATE TABLE #topStates
+(state nvarchar(255),
+topstate float,
+)
+
+INSERT INTO #topStates 
+SELECT State , ROUND(AVG(Literacy) ,0) as avg_literacy_ratio
+FROM project..Data1
+GROUP BY State
+ORDER BY avg_literacy_ratio DESC;
+
+SELECT TOP 3 * FROM #topStates ORDER BY #topStates.topstate desc;	
+
+-- FOR BOTTOM
+
+DROP TABLE IF EXISTS #bottomStates;
+CREATE TABLE #bottomStates
+(state nvarchar(255),
+bottom_state float,
+)
+
+INSERT INTO #bottomStates 
+SELECT State , ROUND(AVG(Literacy) ,0) as avg_literacy_ratio
+FROM project..Data1
+GROUP BY State
+ORDER BY avg_literacy_ratio DESC;
+
+SELECT TOP 3 * FROM #bottomStates ORDER BY #bottomStates.bottom_state asc;
+
+
+-- COMBINE TWO TABLE USING UNION OPERATOR
+
+SELECT * FROM (
+SELECT TOP 3 * FROM #topStates ORDER BY #topStates.topstate desc) a
+UNION 
+SELECT * FROM (
+SELECT TOP 3 * FROM #bottomStates ORDER BY #bottomStates.bottom_state asc) b;
+
+-- states starting  with letter a OR b
+
+SELECT DISTINCT State FROM project..data1 WHERE LOWER(State) LIKE 'a%' OR LOWER(State) LIKE 'b%' ; 
+
+
+-- states ending with letter m AND staring with a
+
+SELECT DISTINCT State FROM project..data1 WHERE LOWER(State) LIKE 'a%' AND LOWER(State) LIKE '%m' ;
+
+
+
+--  joining both tables
+
+SELECT d1.District, d1.State, d1.Sex_Ratio, d2.Population
+FROM project..Data1 d1 
+INNER JOIN project..Data2 d2
+ON d1.District = d2.District;
+
+
+-- from above query find no of females and no. of males
+--formula
+--female / males = sex_ratio -----------1)
+--females + males = population ----------2)
+--females = population - males ----------3)
+--from equ 1) & 3)
+--(population - males) = sex_ratio * males
+
+--population = males(sex_ratio +1)
+
+--males = population / (sex_ratio + 1 ) ------for males 4)
+--from equ 3) & 4)
+--females = population -  population / (sex_ratio + 1 )
+  --      = population(1-1/(sex_ratio+1)
+  --      = population * (sex_ratio) /(sex_ratio+1)
+
+SELECT d3.District,d3.State, ROUND(d3.Population /(d3.sex_ratio+1), 0) AS males, ROUND((d3.population * d3.sex_ratio)/(d3.sex_ratio+1), 0) AS females FROM
+( SELECT d1.District, d1.State, d1.Sex_Ratio/1000 sex_ratio, d2.Population
+  FROM project..Data1 d1 
+  INNER JOIN project..Data2 d2
+  ON d1.District = d2.District
+ ) AS d3
+
+
+ -- FROM above query total males & females by state
+SELECT d4.State, SUM(d4.males) AS total_males, SUM(d4.females) AS total_females FROM
+(SELECT d3.District,d3.State, ROUND(d3.Population /(d3.sex_ratio+1), 0) AS males, ROUND((d3.population * d3.sex_ratio)/(d3.sex_ratio+1), 0) AS females FROM
+( SELECT d1.District, d1.State, d1.Sex_Ratio/1000 sex_ratio, d2.Population
+  FROM project..Data1 d1 
+  INNER JOIN project..Data2 d2
+  ON d1.District = d2.District
+ ) AS d3) d4
+ GROUP BY State;
+
+ -- total literacy rate
+ -- total literate_people / population = literacy_ratio
+ -- =total literate_people =literacy_ratio * population 
+ -- total illiterate_people = (1- literacy_ratio)* population
+ SELECT d.District, d.State, ROUND(d.Literacy_ratio * d.population,0) AS literate_people , ROUND(((1- d.literacy_ratio)* d.population),0) AS illiterate_people FROM
+ ( SELECT d1.District, d1.State, d1.Literacy/100 literacy_ratio, d2.Population
+   FROM project..Data1 d1 
+   INNER JOIN project..Data2 d2
+   ON d1.District = d2.District
+   ) d
+
+
+   -- TOTAL LITERACY RATE BY STATE 
+   SELECT e.State, SUM(literate_people) AS total_literate_people, SUM(illiterate_people ) AS total_illiterate_people FROM
+   ( SELECT d.District, d.State, ROUND(d.Literacy_ratio * d.population,0) AS literate_people , ROUND(((1- d.literacy_ratio)* d.population),0) AS illiterate_people FROM
+   ( SELECT d1.District, d1.State, d1.Literacy/100 literacy_ratio, d2.Population
+   FROM project..Data1 d1 
+   INNER JOIN project..Data2 d2
+   ON d1.District = d2.District
+   ) d) e
+   GROUP BY State
+
+-- population in previous census
+-- prev_census + growth  * prev_census = population
+-- prev_census = population/(1 + growth)
+
+SELECT d.District, d.State, ROUND(d.Population/(1 + d.growth), 0) AS prev_census, d.Population AS curr_census_population FROM
+( SELECT d1.District, d1.State, d1.Growth growth, d2.Population
+FROM project..Data1 d1 
+INNER JOIN project..Data2 d2
+ON d1.District = d2.District ) d
+
+-- GROUP BY STATE ABOVE QUERY
+
+SELECT e.State, SUM(e.prev_census ) AS total_prev_census  , SUM(e.curr_census_population) AS total_curr_census_pop FROM
+(SELECT d.District, d.State, ROUND(d.Population/(1 + d.growth), 0) AS prev_census, d.Population AS curr_census_population FROM
+( SELECT d1.District, d1.State, d1.Growth growth, d2.Population
+FROM project..Data1 d1 
+INNER JOIN project..Data2 d2
+ON d1.District = d2.District ) d)e
+GROUP BY State
+
+-- total no. of population of india in prev and current census
+
+SELECT SUM(f.total_prev_census) AS total_prev, SUM(f.total_curr_census_pop) AS total_curr FROM
+(
+SELECT e.State, SUM(e.prev_census ) AS total_prev_census  , SUM(e.curr_census_population) AS total_curr_census_pop FROM
+(SELECT d.District, d.State, ROUND(d.Population/(1 + d.growth), 0) AS prev_census, d.Population AS curr_census_population FROM
+( SELECT d1.District, d1.State, d1.Growth growth, d2.Population
+FROM project..Data1 d1 
+INNER JOIN project..Data2 d2
+ON d1.District = d2.District ) d)e
+GROUP BY State) f
+
+
+---- population vs area
+
+SELECT z.total_area / z.total_prev AS prev_census_population_VS_area , z.total_area / z.total_curr AS curr_census_population_VS_area  FROM (
+SELECT p.*, r.total_area FROM (
+SELECT '1' AS keyy , n.* FROM
+
+(SELECT SUM(f.total_prev_census) AS total_prev, SUM(f.total_curr_census_pop) AS total_curr FROM
+(
+SELECT e.State, SUM(e.prev_census ) AS total_prev_census  , SUM(e.curr_census_population) AS total_curr_census_pop FROM
+(SELECT d.District, d.State, ROUND(d.Population/(1 + d.growth), 0) AS prev_census, d.Population AS curr_census_population FROM
+( SELECT d1.District, d1.State, d1.Growth growth, d2.Population
+FROM project..Data1 d1 
+INNER JOIN project..Data2 d2
+ON d1.District = d2.District ) d)e
+GROUP BY State) f) n) p
+INNER JOIN (
+SELECT '1' AS keyy , x.* FROM (
+SELECT SUM(Area_km2) AS total_area FROM project..Data2 ) x  ) r ON p.keyy=r.keyy ) z
+
+
+
+-- window function - 
+--OUTPUT TOP 3 districts FROM each State WITH highest literacy rate
+
+select h.* from(
+SELECT District,State,Literacy, RANK() 
+OVER(PARTITION BY State ORDER BY Literacy DESC )rnk 
+FROM project..Data1) h
+WHERE h.rnk in (1,2,3)
+ORDER BY State
